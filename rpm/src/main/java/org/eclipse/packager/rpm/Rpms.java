@@ -65,12 +65,6 @@ public class Rpms {
         return sb.toString();
     }
 
-    public static String dumpValue(final Object value) {
-        final StringBuilder sb = new StringBuilder();
-        dumpValue(sb, value);
-        return sb.toString();
-    }
-
     static void writeByteBuffer(final OutputStream stream, final ByteBuffer dataStore) throws IOException {
         final WritableByteChannel c = Channels.newChannel(stream);
         while (dataStore.hasRemaining()) {

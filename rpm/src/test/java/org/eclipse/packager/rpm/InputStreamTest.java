@@ -33,16 +33,16 @@ public class InputStreamTest {
             Assertions.assertEquals(280, in.getPayloadHeader().getStart());
             Assertions.assertEquals(3501, in.getPayloadHeader().getLength());
 
-            Assertions.assertEquals("cpio", in.getPayloadHeader().getTag(RpmTag.PAYLOAD_FORMAT));
-            Assertions.assertEquals("lzma", in.getPayloadHeader().getTag(RpmTag.PAYLOAD_CODING));
+            Assertions.assertEquals("cpio", in.getPayloadHeader().getTag(RpmTag.PAYLOAD_FORMAT).asString());
+            Assertions.assertEquals("lzma", in.getPayloadHeader().getTag(RpmTag.PAYLOAD_CODING).asString());
 
-            Assertions.assertEquals("org.eclipse.scada", in.getPayloadHeader().getTag(RpmTag.NAME));
-            Assertions.assertEquals("0.2.1", in.getPayloadHeader().getTag(RpmTag.VERSION));
-            Assertions.assertEquals("1", in.getPayloadHeader().getTag(RpmTag.RELEASE));
+            Assertions.assertEquals("org.eclipse.scada", in.getPayloadHeader().getTag(RpmTag.NAME).asString());
+            Assertions.assertEquals("0.2.1", in.getPayloadHeader().getTag(RpmTag.VERSION).asString());
+            Assertions.assertEquals("1", in.getPayloadHeader().getTag(RpmTag.RELEASE).asString());
 
-            Assertions.assertEquals("noarch", in.getPayloadHeader().getTag(RpmTag.ARCH));
-            Assertions.assertEquals("linux", in.getPayloadHeader().getTag(RpmTag.OS));
-            Assertions.assertEquals("EPL", in.getPayloadHeader().getTag(RpmTag.LICENSE));
+            Assertions.assertEquals("noarch", in.getPayloadHeader().getTag(RpmTag.ARCH).asString());
+            Assertions.assertEquals("linux", in.getPayloadHeader().getTag(RpmTag.OS).asString());
+            Assertions.assertEquals("EPL", in.getPayloadHeader().getTag(RpmTag.LICENSE).asString());
 
             Assertions.assertArrayEquals(new String[] { //
                     "/etc/", //
@@ -55,7 +55,7 @@ public class InputStreamTest {
                     "/usr/share/eclipsescada/sql/", //
                     "/var/log/", //
                     "/var/run/", //
-            }, (String[]) in.getPayloadHeader().getTag(RpmTag.DIRNAMES));
+            }, in.getPayloadHeader().getTag(RpmTag.DIRNAMES).asStringArray());
         }
     }
 

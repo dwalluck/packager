@@ -20,17 +20,21 @@ import java.util.Optional;
 
 import org.eclipse.packager.rpm.ReadableHeader;
 import org.eclipse.packager.rpm.RpmBaseTag;
+import org.eclipse.packager.rpm.RpmTagValue;
+
+import static java.lang.Integer.MAX_VALUE;
+import static org.eclipse.packager.rpm.header.Type.UNKNOWN;
 
 public class InputHeader<T extends RpmBaseTag> implements ReadableHeader<T> {
-    private final Map<Integer, HeaderValue> entries;
+    private final Map<Integer, HeaderValue<?>> entries;
 
     private final long start;
 
     private final long length;
 
-    public InputHeader(final HeaderValue[] entries, final long start, final long length) {
-        final Map<Integer, HeaderValue> tags = new LinkedHashMap<>(entries.length);
-        for (final HeaderValue entry : entries) {
+    public InputHeader(final HeaderValue<?>[] entries, final long start, final long length) {
+        final Map<Integer, HeaderValue<?>> tags = new LinkedHashMap<>(entries.length);
+        for (final HeaderValue<?> entry : entries) {
             tags.put(entry.getTag(), entry);
         }
 
@@ -58,44 +62,44 @@ public class InputHeader<T extends RpmBaseTag> implements ReadableHeader<T> {
         return this.length;
     }
 
-    public Object getTag(final T tag) {
+    public RpmTagValue<?> getTag(final T tag) {
         return getTagOrDefault(tag, null);
     }
 
-    public Object getTag(final int tag) {
+    public RpmTagValue<?> getTag(final int tag) {
         return getTagOrDefault(tag, null);
     }
 
     @Override
-    public Optional<Object> getValue(final T tag) {
+    public Optional<RpmTagValue<?>> getValue(final T tag) {
         return Optional.ofNullable(getTag(tag));
     }
 
-    public Optional<Object> getOptionalTag(final T tag) {
+    public Optional<RpmTagValue<?>> getOptionalTag(final T tag) {
         return getEntry(tag).map(HeaderValue::getValue);
     }
 
-    public Optional<Object> getOptionalTag(final int tag) {
+    public Optional<RpmTagValue<?>> getOptionalTag(final int tag) {
         return getEntry(tag).map(HeaderValue::getValue);
     }
 
-    public Optional<HeaderValue> getEntry(final T tag) {
+    public Optional<HeaderValue<?>> getEntry(final T tag) {
         return Optional.ofNullable(this.entries.get(tag.getValue()));
     }
 
-    public Optional<HeaderValue> getEntry(final int tag) {
+    public Optional<HeaderValue<?>> getEntry(final int tag) {
         return Optional.ofNullable(this.entries.get(tag));
     }
 
-    public Object getTagOrDefault(final T tag, final Object defaultValue) {
-        return getOptionalTag(tag).orElse(defaultValue);
+    public RpmTagValue<?> getTagOrDefault(final T tag, final Object defaultValue) {
+        return getOptionalTag(tag).orElse(defaultValue != null ? new RpmTagValue<>(UNKNOWN, MAX_VALUE, defaultValue) : null);
     }
 
-    public Object getTagOrDefault(final int tag, final Object defaultValue) {
-        return getOptionalTag(tag).orElse(defaultValue);
+    public RpmTagValue<?> getTagOrDefault(final int tag, final Object defaultValue) {
+        return getOptionalTag(tag).orElse(defaultValue != null ? new RpmTagValue<>(UNKNOWN, MAX_VALUE, defaultValue) : null);
     }
 
-    public Map<Integer, HeaderValue> getRawTags() {
+    public Map<Integer, HeaderValue<?>> getRawTags() {
         return this.entries;
     }
 

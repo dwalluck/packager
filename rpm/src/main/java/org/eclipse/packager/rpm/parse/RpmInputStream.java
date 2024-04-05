@@ -19,7 +19,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.Optional;
+import java.util.Objects;
 
 import org.apache.commons.compress.archivers.cpio.CpioArchiveInputStream;
 import org.eclipse.packager.rpm.RpmBaseTag;
@@ -92,17 +92,7 @@ public class RpmInputStream extends InputStream {
 
         // payload format
 
-        final Object payloadFormatValue = this.payloadHeader.getTag(RpmTag.PAYLOAD_FORMAT);
-
-        if (payloadFormatValue != null && !(payloadFormatValue instanceof String)) {
-            throw new IOException("Payload format must be a single string");
-        }
-
-        String payloadFormat = (String) payloadFormatValue;
-
-        if (payloadFormat == null) {
-            payloadFormat = "cpio";
-        }
+        final String payloadFormat = Objects.requireNonNullElse(this.payloadHeader.getTag(RpmTag.PAYLOAD_FORMAT).asString(), "cpio");
 
         if (!"cpio".equals(payloadFormat)) {
             throw new IOException(String.format("Unknown payload format: %s", payloadFormat));
@@ -110,18 +100,10 @@ public class RpmInputStream extends InputStream {
 
         // payload coding
 
-        final Optional<Object> payloadCodingHeader = this.payloadHeader.getOptionalTag(RpmTag.PAYLOAD_CODING);
+        final String payloadCoding = Objects.requireNonNullElse(this.payloadHeader.getTag(RpmTag.PAYLOAD_CODING).asString(), "");
 
-        if (!payloadCodingHeader.isPresent()) {
+        if (payloadCoding.isEmpty()) {
             return this.in;
-        }
-
-        final Object payloadCodingValue = payloadCodingHeader.get();
-
-        final String payloadCoding = (String) payloadCodingValue;
-
-        if (payloadCodingValue != null && !(payloadCodingValue instanceof String)) {
-            throw new IOException("Payload coding must be a single string");
         }
 
         final PayloadCoding coding = PayloadCoding.fromValue(payloadCoding).orElseThrow(() -> new IOException(String.format("Unknown payload coding: '%s'", payloadCoding)));
@@ -227,13 +209,13 @@ public class RpmInputStream extends InputStream {
         return new InputHeader<>(entries, start, end - start);
     }
 
-    private HeaderValue readEntry() throws IOException {
+    private HeaderValue<?> readEntry() throws IOException {
         final int tag = this.in.readInt();
         final int type = this.in.readInt();
         final int offset = this.in.readInt();
         final int count = this.in.readInt();
 
-        return new HeaderValue(tag, type, offset, count);
+        return new HeaderValue<>(tag, type, offset, count);
     }
 
     private byte[] readComplete(final int size) throws IOException {

@@ -58,7 +58,7 @@ class Issue136Test {
 
             final RpmLead lead = in.getLead();
             final InputHeader<RpmTag> header = in.getPayloadHeader();
-            final String name = RpmInformations.asString(header.getTag(RpmTag.NAME));
+            final String name = header.getTag(RpmTag.NAME).asString();
 
             assertEquals(originalName.length(), name.length());
 

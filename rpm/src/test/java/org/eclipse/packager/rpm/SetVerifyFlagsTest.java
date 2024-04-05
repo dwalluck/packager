@@ -94,13 +94,13 @@ class SetVerifyFlagsTest {
         try (final RpmInputStream in = new RpmInputStream(new BufferedInputStream(Files.newInputStream(outFile)))) {
             Dumper.dumpAll(in);
             final InputHeader<RpmTag> header = in.getPayloadHeader();
-            final String[] dirNames = (String[]) header.getTag(RpmTag.DIRNAMES);
+            final String[] dirNames = header.getTag(RpmTag.DIRNAMES).asStringArray();
             assertArrayEquals(new String[] { DIRNAME }, dirNames);
-            final String[] baseNames = (String[]) header.getTag(RpmTag.BASENAMES);
+            final String[] baseNames = header.getTag(RpmTag.BASENAMES).asStringArray();
             assertArrayEquals(new String[] { NAME_myconf, NAME_myreadme }, baseNames);
-            final Integer[] fileFlags = (Integer[]) header.getTag(RpmTag.FILE_FLAGS);
+            final Integer[] fileFlags = header.getTag(RpmTag.FILE_FLAGS).asIntegerArray();
             assertArrayEquals(new Integer[] { 17, 256 }, fileFlags); // 17: CONFIGURATION|NOREPLACE, 256: README
-            final Integer[] fileVerifyFlags = (Integer[]) header.getTag(RpmTag.FILE_VERIFYFLAGS);
+            final Integer[] fileVerifyFlags = header.getTag(RpmTag.FILE_VERIFYFLAGS).asIntegerArray();
             assertArrayEquals(new Integer[] { 24, -1 }, fileVerifyFlags); // 24: USER|GROUP, -1: <default>
         }
     }

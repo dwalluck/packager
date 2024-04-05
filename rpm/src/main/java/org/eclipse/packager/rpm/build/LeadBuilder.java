@@ -13,6 +13,7 @@
 
 package org.eclipse.packager.rpm.build;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
@@ -73,14 +74,19 @@ public class LeadBuilder {
         Objects.requireNonNull(architectureMapper);
         Objects.requireNonNull(operatingSystemMapper);
 
-        final Object os = header.get(RpmTag.OS);
-        final Object arch = header.get(RpmTag.ARCH);
+        final byte[] osValue = header.get(RpmTag.OS).asByteArray();
+        final byte[] archValue = header.get(RpmTag.ARCH).asByteArray();
 
-        if (os instanceof String) {
-            this.architecture = architectureMapper.apply((String) os).orElse(Architecture.NOARCH).getValue();
+        final String os0 = osValue != null && osValue.length > 1 ? new String(osValue, StandardCharsets.UTF_8) : null;
+        final String arch0 = archValue != null && archValue.length > 1 ? new String(archValue, StandardCharsets.UTF_8) : null;
+
+        if (os0 != null) {
+            final String os = os0.substring(0, os0.length() - 1);
+            this.architecture = architectureMapper.apply(os).orElse(Architecture.NOARCH).getValue();
         }
-        if (arch instanceof String) {
-            this.operatingSystem = operatingSystemMapper.apply((String) arch).orElse(OperatingSystem.UNKNOWN).getValue();
+        if (arch0 != null) {
+            final String arch = arch0.substring(0, arch0.length() - 1);
+            this.operatingSystem = operatingSystemMapper.apply(arch).orElse(OperatingSystem.UNKNOWN).getValue();
         }
     }
 

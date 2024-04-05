@@ -13,124 +13,140 @@
 
 package org.eclipse.packager.rpm;
 
-import java.util.Optional;
+import static java.lang.Integer.MAX_VALUE;
 
-public class RpmTagValue {
-    private final Object value;
+import org.apache.commons.codec.binary.Hex;
+import org.eclipse.packager.rpm.header.Type;
 
-    public RpmTagValue(final Object value) {
+import java.nio.ByteBuffer;
+import java.sql.Blob;
+import java.util.Arrays;
+
+public class RpmTagValue<T> {
+    private final int rawType;
+
+    private final Type type;
+
+    private final T value;
+
+    public RpmTagValue(T value) {
+        this.rawType = MAX_VALUE;
+        this.type = Type.UNKNOWN;
         this.value = value;
     }
 
-    public Object getValue() {
+    public RpmTagValue(Type type, int rawType, T value) {
+        this.rawType = rawType;
+        this.type = type;
+        this.value = value;
+    }
+
+    public int getRawType() {
+        return this.rawType;
+    }
+
+    public Type getType() {
+        return this.type;
+    }
+
+    public T getValue() {
         return this.value;
     }
 
-    public Optional<String[]> asStringArray() {
-        if (this.value == null) {
-            return Optional.empty();
-        }
-
-        if (this.value instanceof String) {
-            return Optional.of(new String[] { (String) this.value });
-        }
-        if (this.value instanceof String[]) {
-            return Optional.of((String[]) this.value);
-        }
-
-        return Optional.empty();
+    public byte[] asByteArray() {
+        return (byte[]) this.value;
     }
 
-    public Optional<String> asString() {
-        if (this.value == null) {
-            return Optional.empty();
-        }
-
-        if (this.value instanceof String) {
-            return Optional.of((String) this.value);
-        }
-
-        if (this.value instanceof String[]) {
-            final String[] arr = (String[]) this.value;
-            if (arr.length > 0) {
-                return Optional.of(arr[0]);
-            } else {
-                return Optional.empty();
-            }
-        }
-
-        return Optional.empty();
+    public Integer[] asIntegerArray() {
+        return (Integer[]) this.value;
     }
 
-    public Optional<Integer[]> asIntegerArray() {
+    public String[] asStringArray() {
+        return (String[]) this.value;
+    }
+
+    public int asInt() {
+        return (int) this.value;
+    }
+
+    public Long asLong() {
+        if (this.value instanceof Number) {
+            return ((Number) this.value).longValue();
+        }
+
+        return null;
+    }
+
+    public String asString() {
+        if (this.value instanceof String[]) {
+            String[] values = (String[]) this.value;
+            return values.length > 0 ? values[0] : null;
+        }
+
+        return (String) this.value;
+    }
+
+    public Class<?> getClazz() {
+        return this.value.getClass();
+    }
+
+    @Override
+    public String toString() {
         if (this.value == null) {
-            return Optional.empty();
+            return null;
+        }
+
+        if (this.value instanceof Character) {
+            return String.valueOf((char) this.value);
+        }
+
+        if (this.value instanceof Character[]) {
+            return Arrays.toString((Character[]) this.value);
+        }
+
+        if (this.value instanceof byte[]) {
+            return Hex.encodeHexString((byte[]) this.value);
+        }
+
+        if (this.value instanceof Short) {
+            return String.valueOf(this.value);
+        }
+
+        if (this.value instanceof Short[]) {
+            return Arrays.toString((Short[]) this.value);
         }
 
         if (this.value instanceof Integer) {
-            return Optional.of(new Integer[] { (Integer) this.value });
-        }
-        if (this.value instanceof Integer[]) {
-            return Optional.of((Integer[]) this.value);
-        }
-
-        return Optional.empty();
-    }
-
-    public Optional<Integer> asInteger() {
-        if (this.value == null) {
-            return Optional.empty();
-        }
-
-        if (this.value instanceof Integer) {
-            return Optional.of((Integer) this.value);
+            return String.valueOf(this.value);
         }
 
         if (this.value instanceof Integer[]) {
-            final Integer[] arr = (Integer[]) this.value;
-            if (arr.length > 0) {
-                return Optional.of(arr[0]);
-            } else {
-                return Optional.empty();
-            }
-        }
-
-        return Optional.empty();
-    }
-
-    public Optional<Long[]> asLongArray() {
-        if (this.value == null) {
-            return Optional.empty();
+            return Arrays.toString((Integer[]) this.value);
         }
 
         if (this.value instanceof Long) {
-            return Optional.of(new Long[] { (Long) this.value });
-        }
-        if (this.value instanceof Long[]) {
-            return Optional.of((Long[]) this.value);
-        }
-
-        return Optional.empty();
-    }
-
-    public Optional<Long> asLong() {
-        if (this.value == null) {
-            return Optional.empty();
-        }
-
-        if (this.value instanceof Long) {
-            return Optional.of(((Long) this.value).longValue());
+            return String.valueOf(this.value);
         }
 
         if (this.value instanceof Long[]) {
-            final Long[] arr = (Long[]) this.value;
-            if (arr.length > 0) {
-                return Optional.of(arr[0]);
-            } else {
-                return Optional.empty();
-            }
+            return Arrays.toString((Long[]) this.value);
         }
 
-        return Optional.empty();
+        if (this.value instanceof String) {
+            return (String) this.value;
+        }
+
+        if (this.value instanceof String[]) {
+            return Arrays.toString((String[]) this.value);
+        }
+
+        if (this.value instanceof ByteBuffer) {
+            ByteBuffer buf = ((ByteBuffer) this.value);
+            byte[] arr = new byte[buf.remaining()];
+            buf.get(arr);
+            return Hex.encodeHexString(arr);
+        }
+
+        return this.value.toString();
     }
 }

@@ -26,6 +26,7 @@ import org.apache.commons.compress.archivers.cpio.CpioArchiveEntry;
 import org.apache.commons.compress.archivers.cpio.CpioArchiveInputStream;
 import org.eclipse.packager.rpm.RpmSignatureTag;
 import org.eclipse.packager.rpm.RpmTag;
+import org.eclipse.packager.rpm.RpmTagValue;
 import org.eclipse.packager.rpm.info.RpmInformation.Dependency;
 import org.eclipse.packager.rpm.parse.InputHeader;
 import org.eclipse.packager.rpm.parse.RpmInputStream;
@@ -70,11 +71,10 @@ public final class RpmInformations {
 
         // changelog
 
-        final Object val = header.getTag(RpmTag.CHANGELOG_TIMESTAMP);
-        if (val instanceof Long[]) {
-            final Long[] ts = (Long[]) val;
-            final String[] authors = (String[]) header.getTag(RpmTag.CHANGELOG_AUTHOR);
-            final String[] texts = (String[]) header.getTag(RpmTag.CHANGELOG_TEXT);
+        final Integer[] ts = header.getTag(RpmTag.CHANGELOG_TIMESTAMP).asIntegerArray();
+        if (ts != null && ts.length > 0) {
+            final String[] authors = header.getTag(RpmTag.CHANGELOG_AUTHOR).asStringArray();
+            final String[] texts = header.getTag(RpmTag.CHANGELOG_TEXT).asStringArray();
 
             final List<RpmInformation.Changelog> changes = new ArrayList<>(ts.length);
 
@@ -82,7 +82,7 @@ public final class RpmInformations {
                 changes.add(new RpmInformation.Changelog(ts[i], authors[i], texts[i]));
             }
 
-            Collections.sort(changes, Comparator.comparingLong(RpmInformation.Changelog::getTimestamp));
+            changes.sort(Comparator.comparingLong(RpmInformation.Changelog::getTimestamp));
 
             result.setChangelog(changes);
         }
@@ -187,39 +187,19 @@ public final class RpmInformations {
         return name;
     }
 
-    public static String asString(final Object value) {
+    private static String asString(final RpmTagValue<?> value) {
         if (value == null) {
             return null;
         }
 
-        if (value instanceof String) {
-            return (String) value;
-        }
-        if (value instanceof String[]) {
-            final String[] values = (String[]) value;
-            if (values.length > 0) {
-                return values[0];
-            }
-            return null;
-        }
-
-        return value.toString();
+        return value.asString();
     }
 
-    public static Long asLong(final Object value) {
+    private static Long asLong(final RpmTagValue<?> value) {
         if (value == null) {
             return null;
         }
 
-        if (value instanceof Number) {
-            return ((Number) value).longValue();
-        }
-
-        try {
-            return Long.parseLong(value.toString());
-        } catch (final NumberFormatException e) {
-            return null;
-        }
+        return value.asLong();
     }
-
 }

@@ -22,5 +22,5 @@ public interface ReadableHeader<T extends RpmBaseTag> {
      * @param tag the tag
      * @return the optional value
      */
-    public Optional<Object> getValue(T tag);
+    Optional<RpmTagValue<?>> getValue(T tag);
 }

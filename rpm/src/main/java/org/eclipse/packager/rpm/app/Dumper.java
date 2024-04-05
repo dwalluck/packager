@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
@@ -26,6 +27,7 @@ import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 
+import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.compress.archivers.cpio.CpioArchiveEntry;
 import org.apache.commons.compress.archivers.cpio.CpioArchiveInputStream;
 import org.eclipse.packager.rpm.Architecture;
@@ -99,9 +101,14 @@ public class Dumper {
     }
 
     private static void dumpGroup(final RpmInputStream in, final String name, final RpmTag nameTag, final RpmTag versionTag, final RpmTag flagTag) throws IOException {
-        final String[] names = new RpmTagValue(in.getPayloadHeader().getTag(nameTag)).asStringArray().orElse(null);
-        final String[] versions = new RpmTagValue(in.getPayloadHeader().getTag(versionTag)).asStringArray().orElse(null);
-        final Integer[] flags = new RpmTagValue(in.getPayloadHeader().getTag(flagTag)).asIntegerArray().orElse(null);
+        System.out.println(name + ":");
+        final RpmTagValue<?> nameValue = in.getPayloadHeader().getTag(nameTag);
+        final String[] names = nameValue != null ? nameValue.asStringArray() : null;
+        final RpmTagValue<?> versionsValue = in.getPayloadHeader().getTag(versionTag);
+        final String[] versions = versionsValue != null ? versionsValue.asStringArray() : null;
+        final RpmTagValue<?> flagsValue = in.getPayloadHeader().getTag(flagTag);
+        final Integer[] flags = (flagsValue != null && flagsValue.getValue() instanceof Integer[]) ? flagsValue.asIntegerArray() : new Integer[names != null ? names.length : 0];
+        Arrays.fill(flags, 0);
         dumpDeps(name, names, versions, flags);
     }
 
@@ -119,23 +126,23 @@ public class Dumper {
         System.out.println(string);
         System.out.println("=================================");
 
-        Set<Entry<Integer, HeaderValue>> data;
+        Set<Entry<Integer, HeaderValue<?>>> data;
         if (sorted) {
             data = new TreeMap<>(header.getRawTags()).entrySet();
         } else {
             data = header.getRawTags().entrySet();
         }
 
-        for (final Map.Entry<Integer, HeaderValue> entry : data) {
+        for (final Map.Entry<Integer, HeaderValue<?>> entry : data) {
             Object tag = func.apply(entry.getKey());
             if (tag == null) {
                 tag = entry.getKey();
             }
 
-            System.out.format("%20s - %s%n", tag, Rpms.dumpValue(entry.getValue()));
+            System.out.format("%20s - %s%n", tag, entry.getValue().getValue());
 
             if (entry.getKey() == 62 || entry.getKey() == 63) {
-                final ByteBuffer buf = ByteBuffer.wrap((byte[]) entry.getValue().getValue());
+                final ByteBuffer buf = ByteBuffer.wrap(entry.getValue().getValue().asByteArray());
                 System.out.format("Immutable - tag: %s, type: %s, position: %s, count: %s%n", buf.getInt(), buf.getInt(), buf.getInt(), buf.getInt());
             }
         }

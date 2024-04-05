@@ -20,9 +20,11 @@ import java.util.EnumSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 import org.eclipse.packager.rpm.ReadableHeader;
 import org.eclipse.packager.rpm.RpmTag;
+import org.eclipse.packager.rpm.RpmTagValue;
 import org.eclipse.packager.rpm.header.Header;
 
 public final class Dependencies {
@@ -113,23 +115,21 @@ public final class Dependencies {
     private static List<Dependency> getDependencies(final ReadableHeader<RpmTag> header, final RpmTag namesTag, final RpmTag versionsTag, final RpmTag flagsTag) {
         Objects.requireNonNull(header);
 
-        final Object rawNames = header.getValue(namesTag).orElse(null);
-        final Object rawVersions = header.getValue(versionsTag).orElse(null);
-        Object rawFlags = header.getValue(flagsTag).orElse(null);
+        final RpmTagValue<?> flagsValue = header.getValue(flagsTag).orElse(null);
+        final Integer[] flags;
 
-        if (rawFlags instanceof Integer[]) {
-            final Integer[] iflags = (Integer[]) rawFlags;
-            final int[] flags = new int[iflags.length];
-            for (int i = 0; i < iflags.length; i++) {
-                flags[i] = iflags[i];
-            }
-            rawFlags = flags;
+        if (flagsValue != null) {
+            flags = flagsValue.asIntegerArray();
+        } else {
+            flags = null;
         }
 
-        if (rawNames instanceof String[] && rawVersions instanceof String[] && rawFlags instanceof int[]) {
-            final String[] names = (String[]) rawNames;
-            final String[] versions = (String[]) rawVersions;
-            final int[] flags = (int[]) rawFlags;
+        final RpmTagValue<?> nameValue = header.getValue(namesTag).orElse(null);
+        final RpmTagValue<?> versionsValue = header.getValue(versionsTag).orElse(null);
+
+        if (nameValue != null && versionsValue != null && flags != null) {
+            final String[] names = nameValue.asStringArray();
+            final String[] versions = versionsValue.asStringArray();
 
             if (names.length == versions.length && names.length == flags.length) {
                 final List<Dependency> result = new ArrayList<>(names.length);

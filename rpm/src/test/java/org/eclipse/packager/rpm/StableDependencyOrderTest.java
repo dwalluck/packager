@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Test;
 
 public class StableDependencyOrderTest {
     @Test
-    public void testStableRequirementSort() throws IOException {
+    public void testStableRequirementSort() {
 
         final Header<RpmTag> header1 = new Header<>();
         final Header<RpmTag> header2 = new Header<>();
@@ -46,9 +46,9 @@ public class StableDependencyOrderTest {
         Collections.reverse(requirementsReverse);
         Dependencies.putRequirements(header2, requirementsReverse);
 
-        Assertions.assertArrayEquals((String[]) header1.get(RpmTag.REQUIRE_NAME), (String[]) header2.get(RpmTag.REQUIRE_NAME));
-        Assertions.assertArrayEquals((String[]) header1.get(RpmTag.REQUIRE_VERSION), (String[]) header2.get(RpmTag.REQUIRE_VERSION));
-        Assertions.assertArrayEquals((int[]) header1.get(RpmTag.REQUIRE_FLAGS), (int[]) header2.get(RpmTag.REQUIRE_FLAGS));
+        Assertions.assertArrayEquals(header1.get(RpmTag.REQUIRE_NAME).asByteArray(), header2.get(RpmTag.REQUIRE_NAME).asByteArray());
+        Assertions.assertArrayEquals(header1.get(RpmTag.REQUIRE_VERSION).asByteArray(), header2.get(RpmTag.REQUIRE_VERSION).asByteArray());
+        Assertions.assertArrayEquals(header1.get(RpmTag.REQUIRE_FLAGS).asByteArray(), header2.get(RpmTag.REQUIRE_FLAGS).asByteArray());
     }
 
 }

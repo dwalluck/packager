@@ -54,7 +54,7 @@ class Issue130Test {
             Dumper.dumpAll(in);
 
             final InputHeader<RpmTag> header = in.getPayloadHeader();
-            final List<String> prefixes = Arrays.asList(new RpmTagValue(header.getTag(RpmTag.PREFIXES)).asStringArray().orElse(null));
+            final List<String> prefixes = Arrays.asList(header.getTag(RpmTag.PREFIXES).asStringArray());
 
             assertEquals(PREFIXES, prefixes);
         }

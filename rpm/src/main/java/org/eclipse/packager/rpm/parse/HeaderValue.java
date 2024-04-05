@@ -13,7 +13,6 @@
 
 package org.eclipse.packager.rpm.parse;
 
-import static com.google.common.io.BaseEncoding.base16;
 import static org.eclipse.packager.rpm.header.Type.UNKNOWN;
 
 import java.io.IOException;
@@ -21,37 +20,14 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.function.Function;
 
+import org.eclipse.packager.rpm.RpmTagValue;
 import org.eclipse.packager.rpm.Rpms;
 import org.eclipse.packager.rpm.header.Type;
 
-public class HeaderValue {
-   static final class Unknown {
-        private final int type;
-
-        private final byte[] value;
-
-        public Unknown(int type, byte[] value) {
-            this.type = type;
-            this.value = value;
-        }
-
-        public int getType() {
-            return this.type;
-        }
-
-        public byte[] getValue() {
-            return this.value;
-        }
-
-        @Override
-        public String toString() {
-            return "UNKNOWN: type: " + this.type + ", data: " + base16().encode(this.value);
-        }
-    }
-
+public class HeaderValue<T> {
     private final int tag;
 
-    private Object value;
+    private RpmTagValue<T> value;
 
     private final int originalType;
 
@@ -73,7 +49,7 @@ public class HeaderValue {
         return this.tag;
     }
 
-    public Object getValue() {
+    public RpmTagValue<T> getValue() {
         return this.value;
     }
 
@@ -89,43 +65,44 @@ public class HeaderValue {
         return this.index;
     }
 
+    @SuppressWarnings("unchecked")
     void fillFromStore(final ByteBuffer storeData) throws IOException {
         switch (this.type) {
         case NULL:
             break;
         case CHAR:
-            this.value = getFromStore(storeData, true, buf -> (char) storeData.get(), Character[]::new);
+            this.value = (RpmTagValue<T>) (this.count == 1 ? new RpmTagValue<>(this.type, this.originalType, getFromStoreSingle(storeData, buf -> (char) storeData.get())) : new RpmTagValue<>(this.type, this.originalType, getFromStore(storeData, buf -> (char) storeData.get(), Character[]::new)));
             break;
         case BYTE:
-            this.value = getFromStore(storeData, true, ByteBuffer::get, Byte[]::new);
+            this.value = (RpmTagValue<T>) (this.count == 1 ? new RpmTagValue<>(this.type, this.originalType, getFromStoreSingle(storeData, buf -> storeData.get())) : new RpmTagValue<>(this.type, this.originalType, getFromStore(storeData, ByteBuffer::get, Byte[]::new)));
             break;
         case SHORT:
-            this.value = getFromStore(storeData, true, ByteBuffer::getShort, Short[]::new);
+            this.value = (RpmTagValue<T>) (this.count == 1 ? new RpmTagValue<>(this.type, this.originalType, getFromStoreSingle(storeData, buf -> storeData.getShort())) : new RpmTagValue<>(this.type, this.originalType, getFromStore(storeData, ByteBuffer::getShort, Short[]::new)));
             break;
         case INT:
-            this.value = getFromStore(storeData, true, ByteBuffer::getInt, Integer[]::new);
+            this.value = (RpmTagValue<T>) (this.count == 1 ? new RpmTagValue<>(this.type, this.originalType, getFromStoreSingle(storeData, buf -> storeData.getInt())) : new RpmTagValue<>(this.type, this.originalType, getFromStore(storeData, ByteBuffer::getInt, Integer[]::new)));
             break;
         case LONG:
-            this.value = getFromStore(storeData, true, ByteBuffer::getLong, Long[]::new);
+            this.value = (RpmTagValue<T>) (this.count == 1 ? new RpmTagValue<>(this.type, this.originalType, getFromStoreSingle(storeData, buf -> storeData.getLong())) : new RpmTagValue<>(this.type, this.originalType, getFromStore(storeData, ByteBuffer::getLong, Long[]::new)));
             break;
         case STRING:
         {
             // only one allowed
             storeData.position(this.index);
-            this.value = makeString(storeData);
+            this.value = (RpmTagValue<T>) new RpmTagValue<>(this.type, this.originalType, makeString(storeData));
         }
             break;
         case BLOB:
         {
-            this.value = getBlob(storeData);
+            this.value = (RpmTagValue<T>) new RpmTagValue<>(this.type, this.originalType, getBlob(storeData));
         }
             break;
         case STRING_ARRAY:
         case I18N_STRING:
-                this.value = getFromStore(storeData, false, HeaderValue::makeString, String[]::new);
+                this.value = (RpmTagValue<T>) new RpmTagValue<>(this.type, this.originalType, getFromStore(storeData, HeaderValue::makeString, String[]::new));
             break;
         case UNKNOWN:
-            this.value = new Unknown(this.originalType, getBlob(storeData));
+            this.value = (RpmTagValue<T>) new RpmTagValue<>(this.type, this.originalType, getBlob(storeData));
             break;
         }
     }
@@ -138,16 +115,17 @@ public class HeaderValue {
     }
 
     @FunctionalInterface
-    public static interface IOFunction<T, R> {
-        public R apply(T t) throws IOException;
+    public interface IOFunction<T, R> {
+        R apply(T t) throws IOException;
     }
 
-    private <R> Object getFromStore(final ByteBuffer data, final boolean collapse, final IOFunction<ByteBuffer, R> func, final Function<Integer, R[]> creator) throws IOException {
+    private <R> R getFromStoreSingle(final ByteBuffer data, final IOFunction<ByteBuffer, R> func) throws IOException {
         data.position(this.index);
-        if (this.count == 1 && collapse) {
-            return func.apply(data);
-        }
+        return func.apply(data);
+    }
 
+    private <R> R[] getFromStore(final ByteBuffer data, final IOFunction<ByteBuffer, R> func, final Function<Integer, R[]> creator) throws IOException {
+        data.position(this.index);
         final R[] result = creator.apply(this.count);
         for (int i = 0; i < this.count; i++) {
             result[i] = func.apply(data);
