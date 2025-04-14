@@ -62,19 +62,19 @@ import org.eclipse.packager.rpm.signature.SignatureProcessors;
  * Build RPM files
  * <p>
  * This class takes care of most tasks building RPM files. The constructor only
- * requests the require attributes. There are a few more meta information
- * entries which can be set using the {@link PackageInformation} class and the
+ * requests the required attributes. There are a few more meta-information
+ * entries that can be set using the {@link PackageInformation} class and the
  * methods {@link #setInformation(PackageInformation)} and
  * {@link #getInformation()}.
  * </p>
  * <p>
- * In order to build an RPM file, create a new instance of the
+ * To build an RPM file, create a new instance of the
  * {@link RpmBuilder} class, set package information, add files by using a
  * context created by {@link #newContext()} and finally call {@link #build()}.
  * The RPM file will only be built once the {@link #build()} method is called.
  * Closing the instance of {@link RpmBuilder} will <em>not</em> write the RPM
  * file, but simply clean up temporary files. Closing this instance will also
- * not delete target RPM file.
+ * not delete the target RPM file.
  * </p>
  * <p>
  * The implementation of this class uses the {@link PayloadRecorder} to create
@@ -83,9 +83,9 @@ import org.eclipse.packager.rpm.signature.SignatureProcessors;
  * </p>
  * <h2>Signature processors</h2>
  * <p>
- * The RPM builder uses a default set of {@link SignatureProcessor}s. In order
- * to add additional ones use the {@link #addDefaultSignatureProcessors()}. It
- * is possible to remove all already registered processors (including the
+ * The RPM builder uses a default set of {@link SignatureProcessor}s.
+ * To add additional ones, use the {@link #addDefaultSignatureProcessors()}.
+ * It is possible to remove all already registered processors (including the
  * default ones) using {@link #removeAllSignatureProcessors()}.
  * </p>
  *
@@ -100,8 +100,8 @@ public class RpmBuilder implements AutoCloseable {
     /**
      * Known versions of RPM.
      * <p>
-     * This is a enum of known versions of the RPM tool itself. It is incomplete
-     * and should be used to ensure compatibility of created RPM file with
+     * This is an enum of known versions of the RPM tool itself.
+     * It is incomplete and should be used to ensure compatibility of the created RPM file with
      * certain versions of RPM. The first known version we track is "4.11",
      * which may not be correct either.
      */
@@ -112,7 +112,7 @@ public class RpmBuilder implements AutoCloseable {
 
         private final String versionString;
 
-        private Version(final String versionString) {
+        Version(final String versionString) {
             this.versionString = versionString;
         }
 
@@ -157,8 +157,8 @@ public class RpmBuilder implements AutoCloseable {
             final int prime = 31;
             int result = 1;
             result = prime * result + (getFlags() == null ? 0 : getFlags().hashCode());
-            result = prime * result + (getName() == null ? 0 : getName().hashCode());
-            result = prime * result + (getVersion() == null ? 0 : getVersion().hashCode());
+            result = prime * result + (super.getName() == null ? 0 : super.getName().hashCode());
+            result = prime * result + (super.getVersion() == null ? 0 : super.getVersion().hashCode());
             result = prime * result + (getDescription() == null ? 0 : getDescription().hashCode());
             return result;
         }
@@ -182,33 +182,30 @@ public class RpmBuilder implements AutoCloseable {
             } else if (!getFlags().equals(other.getFlags())) {
                 return false;
             }
-            if (getName() == null) {
+            if (super.getName() == null) {
                 if (other.getName() != null) {
                     return false;
                 }
-            } else if (!getName().equals(other.getName())) {
+            } else if (!super.getName().equals(other.getName())) {
                 return false;
             }
-            if (getVersion() == null) {
+            if (super.getVersion() == null) {
                 if (other.getVersion() != null) {
                     return false;
                 }
-            } else if (!getVersion().equals(other.getVersion())) {
+            } else if (!super.getVersion().equals(other.getVersion())) {
                 return false;
             }
             if (getDescription() == null) {
-                if (other.getDescription() != null) {
-                    return false;
-                }
-            } else if (!getDescription().equals(other.getDescription())) {
-                return false;
+                return other.getDescription() == null;
+            } else {
+                return getDescription().equals(other.getDescription());
             }
-            return true;
         }
 
         @Override
         public String toString() {
-            return String.format("[%s, %s, %s, %s]", getName(), getVersion(), getFlags(), getDescription());
+            return String.format("[%s, %s, %s, %s]", super.getName(), super.getVersion(), getFlags(), getDescription());
         }
 
     }
@@ -559,15 +556,14 @@ public class RpmBuilder implements AutoCloseable {
         }
 
         /**
-         * see https://github.com/ctron/rpm-builder/issues/41
+         * see <a href="https://github.com/ctron/rpm-builder/issues/41">GH-41</a>
          *
          * @since 0.15.2
          */
         private void customizeVerificationFlags(FileEntry entry, FileInformation information) {
             final Collection<VerifyFlags> informationVerifyFlags = information.getVerifyFlags();
             if (informationVerifyFlags == null) {
-                return; // bail out - entry's verification flag bitmask will remain -1 (meaning: verify
-                        // everthing)
+                return; // bail out - entry's verification flag bitmask will remain -1 (meaning: verify everything)
             }
             int bitmask = 0;
             for (final VerifyFlags verifyFlag : informationVerifyFlags) {
@@ -651,6 +647,7 @@ public class RpmBuilder implements AutoCloseable {
 
     public RpmBuilder(final String name, final RpmVersion version, final String architecture, final Path targetFile, final BuilderOptions options) throws IOException {
         this.name = name;
+        RpmVersion.checkChars(name, RpmVersion.NAME_MATCHER, RpmVersion.FIRSTCHARS_NAME_MATCHER);
         this.version = version;
         this.architecture = architecture;
 
@@ -720,20 +717,13 @@ public class RpmBuilder implements AutoCloseable {
             this.header.putString(RpmTag.PAYLOAD_CODING, finished.getPayloadCoding().getValue());
         }
 
-        if (finished.getPayloadFlags().isPresent()) {
-            this.header.putString(RpmTag.PAYLOAD_FLAGS, finished.getPayloadFlags().get());
-        }
-
+        finished.getPayloadFlags().ifPresent(payloadFlags -> this.header.putString(RpmTag.PAYLOAD_FLAGS, finished.getPayloadFlags().get()));
         this.header.putStringArray(100, "C");
 
         this.header.putString(RpmTag.NAME, this.name);
         this.header.putString(RpmTag.VERSION, this.version.getVersion());
-        if (this.version.getRelease().isPresent()) {
-            this.header.putString(RpmTag.RELEASE, this.version.getRelease().get());
-        }
-        if (this.version.getEpoch().isPresent()) {
-            this.header.putInt(RpmTag.EPOCH, this.version.getEpoch().get());
-        }
+        this.version.getRelease().ifPresent(release -> this.header.putString(RpmTag.RELEASE, release));
+        this.version.getEpoch().ifPresent(epoch -> this.header.putString(RpmTag.EPOCH, epoch.toString()));
 
         this.header.putString(RpmTag.LICENSE, this.information.getLicense());
         this.header.putStringOptional(RpmTag.DISTRIBUTION, this.information.getDistribution());
@@ -1057,7 +1047,7 @@ public class RpmBuilder implements AutoCloseable {
 
         final short smode = (short) (mode | CpioConstants.C_ISDIR);
 
-        final Result result = this.recorder.addDirectory("./" + pathName.toString(), cpioCustomizer(mtime, inode, smode));
+        final Result result = this.recorder.addDirectory("./" + pathName, cpioCustomizer(mtime, inode, smode));
 
         Consumer<FileEntry> c = this::initEntry;
         c = c.andThen(entry -> {
@@ -1083,7 +1073,7 @@ public class RpmBuilder implements AutoCloseable {
 
         final short smode = (short) (mode | CpioConstants.C_ISLNK);
 
-        final Result result = this.recorder.addSymbolicLink("./" + pathName.toString(), linkTo, cpioCustomizer(mtime, inode, smode));
+        final Result result = this.recorder.addSymbolicLink("./" + pathName, linkTo, cpioCustomizer(mtime, inode, smode));
 
         Consumer<FileEntry> c = this::initEntry;
         c = c.andThen(entry -> {
