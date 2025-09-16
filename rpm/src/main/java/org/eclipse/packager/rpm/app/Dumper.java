@@ -21,9 +21,11 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
@@ -56,18 +58,21 @@ public class Dumper {
 
     private static final boolean SORTED = Boolean.getBoolean("sorted");
 
+    private static int rpmFormat = 3;
+
     public static String dumpFlag(final int value, final IntFunction<Optional<?>> func) {
         final Optional<?> flag = func.apply(value);
-        return flag.map(o -> String.format("%s (%s)", o, value)).orElseGet(() -> String.format("%s", value));
+        return flag.map(o -> String.format("%s (%d)", o, value)).orElseGet(() -> String.format("%d", value));
     }
 
     public static void dumpAll(final RpmInputStream in) throws IOException {
         final RpmLead lead = in.getLead();
+        rpmFormat = Objects.requireNonNullElse(in.getPayloadHeader().getInteger(RpmTag.RPM_FORMAT), (int) lead.getMajor());
 
         if (!SKIP_META) {
-            System.out.format("Version: %s.%s%n", lead.getMajor(), lead.getMinor());
+            System.out.format("Version: %d.%d%n", lead.getMajor(), lead.getMinor());
             System.out.format("Name: %s%n", lead.getName());
-            System.out.format("Signature Version: %s%n", lead.getSignatureVersion());
+            System.out.format("Signature Version: %d%n", lead.getSignatureVersion());
             System.out.format("Type: %s, Arch: %s, OS: %s%n", dumpFlag(lead.getType(), Type::fromValue), dumpFlag(lead.getArchitecture(), Architecture::fromValue), dumpFlag(lead.getOperatingSystem(), OperatingSystem::fromValue));
         }
 
@@ -80,6 +85,7 @@ public class Dumper {
 
         if (!SKIP_PAYLOAD) {
             final CpioArchiveInputStream cpio = in.getCpioStream();
+
             CpioArchiveEntry entry;
             while ((entry = cpio.getNextEntry()) != null) {
                 dumpEntry(entry);
@@ -129,19 +135,23 @@ public class Dumper {
         for (final Map.Entry<Integer, HeaderValue<?>> entry : data) {
             final RpmBaseTag tag = func.apply(entry.getKey());
             final HeaderValue<?> value = entry.getValue();
-            System.out.format("%20s - %s%n", tag != null ? tag : entry.getKey(), Rpms.dumpValue(value));
+            System.out.format("%20s - %s%n", tag != null ? tag : RpmTag.find(entry.getKey()), Rpms.dumpValue(value));
 
             if (entry.getKey() == IMMUTABLE_TAG_SIGNATURE || entry.getKey() == IMMUTABLE_TAG_HEADER) {
                 final ByteBuffer buf = ByteBuffer.wrap(entry.getValue().getValue().asByteArray().orElseThrow());
-                System.out.format("Immutable - tag: %s, type: %s, position: %s, count: %s%n", buf.getInt(), buf.getInt(), buf.getInt(), buf.getInt());
+                System.out.format("Immutable - tag: %s, type: %s, position: %d, count: %d%n", RpmTag.find(buf.getInt()), org.eclipse.packager.rpm.header.Type.fromType(buf.getInt()), buf.getInt(), buf.getInt());
             }
         }
     }
 
     private static void dumpEntry(final CpioArchiveEntry entry) {
         System.out.format("-----------------------------------%n");
-        System.out.format(" %s%n", entry.getName());
-        System.out.format(" Size: %s, Chksum: %016x, Align: %s, Inode: %016x, Mode: %08o, NoL: %s, Device: %s.%s%n", entry.getSize(), entry.getChksum(), entry.getAlignmentBoundary(), entry.getInode(), entry.getMode(), entry.getNumberOfLinks(), entry.getDeviceMaj(), entry.getDeviceMin());
+        if (rpmFormat >= 6) {
+            System.out.format(" Size: %d, Align: %d, Fx: 0x%08x%n", entry.getSize(), entry.getAlignmentBoundary(), entry.getInode());
+        } else {
+            System.out.format("%s%n", entry.getName());
+            System.out.format(" Size: %d, Chksum: %016x, Align: %d, Inode: %016x, Mode: %08o, NoL: %d, Device: %d.%d%n", entry.getSize(), entry.getChksum(), entry.getAlignmentBoundary(), entry.getInode(), entry.getMode(), entry.getNumberOfLinks(), entry.getDeviceMaj(), entry.getDeviceMin());
+        }
     }
 
     public static void main(final String[] args) {

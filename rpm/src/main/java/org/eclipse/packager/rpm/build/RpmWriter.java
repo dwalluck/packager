@@ -176,7 +176,7 @@ public class RpmWriter implements AutoCloseable {
 
         // header
 
-        debug("start header - offset: %s, len: %s", this.file.position(), payloadSize);
+        debug("start header - offset: %d, len: %d", this.file.position(), payloadSize);
         safeWrite(buffer);
 
         // padding
@@ -185,7 +185,7 @@ public class RpmWriter implements AutoCloseable {
 
         if (padding > 0) {
             safeWrite(ByteBuffer.wrap(Rpms.EMPTY_128, 0, padding));
-            debug("write - padding - %s", padding);
+            debug("write - padding - %d", padding);
         }
     }
 
@@ -211,7 +211,7 @@ public class RpmWriter implements AutoCloseable {
 
         final int headerSize = this.header.remaining();
         final long payloadSize = this.payloadProvider.getPayloadSize();
-        debug("data - %s - %s", headerSize, payloadSize);
+        debug("data - %d - %d", headerSize, payloadSize);
 
         // set signature data
 
@@ -231,24 +231,24 @@ public class RpmWriter implements AutoCloseable {
 
         // write the header
 
-        debug("package - offset: %s", this.file.position());
+        debug("package - offset: %d", this.file.position());
         safeWrite(this.header.slice()); // write sliced to keep the original position
 
-        debug("payload - offset: %s", this.file.position());
+        debug("payload - offset: %d", this.file.position());
 
         // now append payload data
 
         try (ReadableByteChannel payloadChannel = this.payloadProvider.openChannel()) {
             if (payloadChannel instanceof FileChannel && !isForceCopy()) {
                 final long count = copyFileChannel((FileChannel) payloadChannel, this.file);
-                debug("transferred - %s", count);
+                debug("transferred - %d", count);
             } else {
                 final long count = ByteStreams.copy(payloadChannel, this.file);
-                debug("copied - %s", count);
+                debug("copied - %d", count);
             }
         }
 
-        debug("end - offset: %s", this.file.position());
+        debug("end - offset: %d", this.file.position());
     }
 
     /**
@@ -274,10 +274,10 @@ public class RpmWriter implements AutoCloseable {
             // check for negative result
 
             if (rc < 0) {
-                throw new IOException(String.format("Failed to transfer bytes: rc = %s", rc));
+                throw new IOException(String.format("Failed to transfer bytes: rc = %d", rc));
             }
 
-            debug("transferTo - position: %s, size: %s => rc: %s", position, remaining, rc);
+            debug("transferTo - position: %d, size: %d => rc: %d", position, remaining, rc);
 
             // we should never get zero back, but check anyway
 

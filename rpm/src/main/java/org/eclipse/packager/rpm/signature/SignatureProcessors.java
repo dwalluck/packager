@@ -17,6 +17,7 @@ import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
+import org.eclipse.packager.rpm.RpmFormat;
 import org.eclipse.packager.rpm.RpmSignatureTag;
 import org.eclipse.packager.rpm.Rpms;
 import org.eclipse.packager.rpm.header.Header;
@@ -44,7 +45,7 @@ public final class SignatureProcessors {
 
             @Override
             public void finish(final Header<RpmSignatureTag> signature) {
-                signature.putSize(this.headerSize + this.payloadSize, RpmSignatureTag.SIZE, RpmSignatureTag.LONGSIZE);
+                signature.putSize(this.headerSize + this.payloadSize, RpmSignatureTag.SIZE, RpmSignatureTag.LONGSIZE, RpmFormat.RPM_6.getFormat());
             }
         };
     }
@@ -69,7 +70,7 @@ public final class SignatureProcessors {
 
             @Override
             public void finish(final Header<RpmSignatureTag> signature) {
-                signature.putSize(this.archiveSize, RpmSignatureTag.PAYLOAD_SIZE, RpmSignatureTag.LONGARCHIVESIZE);
+                signature.putSize(this.archiveSize, RpmSignatureTag.PAYLOAD_SIZE, RpmSignatureTag.LONGARCHIVESIZE, RpmFormat.RPM_6.getFormat());
             }
         };
     }

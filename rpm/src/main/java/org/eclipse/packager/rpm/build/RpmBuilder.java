@@ -40,13 +40,16 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.ToLongFunction;
 
+import io.github.dwalluck.libmagic.MagicException;
 import org.apache.commons.compress.archivers.cpio.CpioArchiveEntry;
 import org.apache.commons.compress.archivers.cpio.CpioConstants;
 import org.apache.commons.compress.compressors.zstandard.ZstdUtils;
 import org.eclipse.packager.rpm.Architecture;
+import org.eclipse.packager.rpm.FileClassification;
 import org.eclipse.packager.rpm.FileFlags;
 import org.eclipse.packager.rpm.OperatingSystem;
 import org.eclipse.packager.rpm.PathName;
+import org.eclipse.packager.rpm.RpmFormat;
 import org.eclipse.packager.rpm.RpmTag;
 import org.eclipse.packager.rpm.RpmVersion;
 import org.eclipse.packager.rpm.Rpms;
@@ -57,6 +60,7 @@ import org.eclipse.packager.rpm.coding.PayloadFlags;
 import org.eclipse.packager.rpm.deps.Dependencies;
 import org.eclipse.packager.rpm.deps.Dependency;
 import org.eclipse.packager.rpm.deps.RpmDependencyFlags;
+import org.eclipse.packager.rpm.deps.RpmFileColors;
 import org.eclipse.packager.rpm.header.Header;
 import org.eclipse.packager.rpm.signature.SignatureProcessor;
 import org.eclipse.packager.rpm.signature.SignatureProcessors;
@@ -111,7 +115,8 @@ public class RpmBuilder implements AutoCloseable {
     public enum Version {
         V4_11("4.11"),
         V4_12("4.12"),
-        V4_14("4.14");
+        V4_14("4.14"),
+        V5_99("5.99"),;
 
         private final String versionString;
 
@@ -216,7 +221,7 @@ public class RpmBuilder implements AutoCloseable {
 
     }
 
-    private static List<Feature> features = new ArrayList<>();
+    private static List<Feature> features = new ArrayList<>(10);
 
     static {
 
@@ -233,7 +238,7 @@ public class RpmBuilder implements AutoCloseable {
             features.add(new Feature("PayloadIsZstd", "5.4.18-1", "package payload can be compressed using zstd."));
         }
 
-        features = Collections.unmodifiableList(features);
+        //features = Collections.unmodifiableList(features);
     }
 
     public static class FileEntry {
@@ -266,6 +271,8 @@ public class RpmBuilder implements AutoCloseable {
         private PathName targetName;
 
         private long targetSize;
+
+        private int fileColors;
 
         public void setSize(final long size) {
             this.size = size;
@@ -385,6 +392,14 @@ public class RpmBuilder implements AutoCloseable {
 
         public long getTargetSize() {
             return this.targetSize;
+        }
+
+        public void setFileColors(final int fileColors) {
+            this.fileColors = fileColors;
+        }
+
+        public int getFileColors() {
+            return this.fileColors;
         }
     }
 
@@ -544,6 +559,7 @@ public class RpmBuilder implements AutoCloseable {
         protected void customizeCommon(final FileEntry entry, final FileInformation information) {
             entry.setUser(getNotEmptyOrDefault(information.getUser(), BuilderContext.DEFAULT_USER));
             entry.setGroup(getNotEmptyOrDefault(information.getGroup(), BuilderContext.DEFAULT_GROUP));
+            //entry.setFileColors(RpmFileColors.classify(entry.get));
             // modes are set in specific add methods
         }
 
@@ -660,6 +676,10 @@ public class RpmBuilder implements AutoCloseable {
 
         this.options = options == null ? new BuilderOptions() : new BuilderOptions(options);
 
+        if (this.options.getRpmFormat() >= 6) {
+            this.requiredRpmVersion = Version.V5_99;
+        }
+
         this.targetFile = makeTargetFile(targetFile);
 
         this.recorder = new PayloadRecorder(this.options.getPayloadCoding(), this.options.getPayloadFlags(), this.options.getFileDigestAlgorithm(), this.options.getPayloadProcessors());
@@ -717,6 +737,12 @@ public class RpmBuilder implements AutoCloseable {
         this.provides.add(new Dependency(this.name, this.version.toString(), RpmDependencyFlags.EQUAL));
     }
 
+    /**
+     * {@link Header#makeEntries()} always puts {@link java.nio.charset.StandardCharsets#UTF_8}, so if {@link
+     * BuilderOptions#getRpmFormat()} is {@code >= 6}, we put {@link RpmTag#ENCODING} {@code "utf-8"} to the header.
+     *
+     * @param finished the finished
+     */
     private void fillHeader(final PayloadRecorder.Finished finished) {
         this.header.putString(RpmTag.PAYLOAD_FORMAT, "cpio");
 
@@ -733,6 +759,11 @@ public class RpmBuilder implements AutoCloseable {
         }
 
         this.header.putStringArray(100, "C");
+
+        if (this.options.getRpmFormat() >= 6) {
+            this.header.putInt(RpmTag.RPM_FORMAT, this.options.getRpmFormat());
+            this.header.putString(RpmTag.ENCODING, "utf-8");
+        }
 
         this.header.putString(RpmTag.NAME, this.name);
         this.header.putString(RpmTag.VERSION, this.version.getVersion());
@@ -784,12 +815,18 @@ public class RpmBuilder implements AutoCloseable {
             Arrays.sort(files, comparing(FileEntry::getTargetName));
 
             final long installedSize = Arrays.stream(files).mapToLong(FileEntry::getTargetSize).sum();
-            this.header.putSize(installedSize, RpmTag.SIZE, RpmTag.LONGSIZE);
+            this.header.putSize(installedSize, RpmTag.SIZE, RpmTag.LONGSIZE, this.options.getRpmFormat());
 
             final Collection<FileEntry> filesList = Arrays.asList(files);
+            final boolean hasLargeFiles = this.options.getRpmFormat() >= 6 || filesList.stream().map(FileEntry::getSize).anyMatch(size -> size > Integer.MAX_VALUE);
 
-            // TODO: implement LONG file sizes
-            Header.putIntFields(this.header, filesList, RpmTag.FILE_SIZES, entry -> (int) entry.getSize());
+            if (hasLargeFiles) {
+                Header.putLongFields(this.header, filesList, RpmTag.LONG_FILE_SIZES, FileEntry::getSize);
+                features.add(new Feature("LargeFiles", "4.12.0-1", "support files larger than 4GB"));
+            } else {
+                Header.putIntFields(this.header, filesList, RpmTag.FILE_SIZES, entry -> (int) entry.getSize());
+            }
+
             Header.putShortFields(this.header, filesList, RpmTag.FILE_MODES, FileEntry::getMode);
             Header.putShortFields(this.header, filesList, RpmTag.FILE_RDEVS, FileEntry::getRdevs);
             Header.putIntFields(this.header, filesList, RpmTag.FILE_MTIMES, FileEntry::getModificationTime);
@@ -800,6 +837,8 @@ public class RpmBuilder implements AutoCloseable {
             Header.putFields(this.header, filesList, RpmTag.FILE_GROUPNAME, String[]::new, FileEntry::getGroup, Header::putStringArray);
 
             Header.putIntFields(this.header, filesList, RpmTag.FILE_VERIFYFLAGS, FileEntry::getVerifyFlags);
+
+            Header.putIntFields(this.header, filesList, RpmTag.FILE_COLORS, FileEntry::getFileColors);
 
             putNumber(this.options.getLongMode(), this.header, filesList, RpmTag.FILE_DEVICES, FileEntry::getDevice);
             putNumber(this.options.getLongMode(), this.header, filesList, RpmTag.FILE_INODES, FileEntry::getInode);
@@ -833,13 +872,56 @@ public class RpmBuilder implements AutoCloseable {
                 this.header.putInt(RpmTag.DIR_INDEXES, dirIndexes);
                 this.header.putStringArray(RpmTag.DIRNAMES, dirnames.toArray(new String[0]));
             }
+
+            putColors(this.header);
         } else {
-            this.header.putSize(0, RpmTag.SIZE, RpmTag.LONGSIZE);
+            this.header.putSize(0, RpmTag.SIZE, RpmTag.LONGSIZE, this.options.getRpmFormat());
         }
 
         // add additional headers
 
         this.header.putAll(finished.getAdditionalHeader());
+    }
+
+    private static void putColors(final Header<RpmTag> header) {
+/*
+        rc = classify(fc, pkg->dpaths, fmode.data());
+        if ( rc != RPMRC_OK )
+        goto exit;
+
+        rc = rpmfcApply(fc);
+        if (rc != RPMRC_OK)
+        goto exit;
+
+        headerPutUint32(pkg->header, RPMTAG_FILECOLORS, fc->fcolor.data(), fc->nfiles);
+
+        if (pkg->rpmformat >= 6) {
+            for (rpmsid id = 1; id <= rpmstrPoolNumStr(fc->mdict); id++) {
+                headerPutString(pkg->header, RPMTAG_MIMEDICT,
+                    rpmstrPoolStr(fc->mdict, id));
+            }
+
+            headerPutUint32(pkg->header, RPMTAG_FILEMIMEINDEX,
+                fc->fmdictx.data(), fc->nfiles);
+        } else {
+            for (rpmsid id = 1; id <= rpmstrPoolNumStr(fc->cdict); id++) {
+                headerPutString(pkg->header, RPMTAG_CLASSDICT,
+                    rpmstrPoolStr(fc->cdict, id));
+            }
+
+            headerPutUint32(pkg->header, RPMTAG_FILECLASS,
+                fc->fcdictx.data(), fc->nfiles);
+        }
+
+        if (!fc->ddictx.empty()) {
+            headerPutUint32(pkg->header, RPMTAG_DEPENDSDICT,
+                fc->ddictx.data(), fc->ddictx.size());
+
+            headerPutUint32(pkg->header, RPMTAG_FILEDEPENDSX,
+                fc->fddictx.data(), fc->fddictx.size());
+            headerPutUint32(pkg->header, RPMTAG_FILEDEPENDSN,
+                fc->fddictn.data(), fc->fddictn.size());
+        } */
     }
 
     private static void putNumber(final LongMode longMode, final Header<RpmTag> header, final Collection<FileEntry> files, final RpmTag tag, final ToLongFunction<FileEntry> func) {
@@ -1048,6 +1130,12 @@ public class RpmBuilder implements AutoCloseable {
             entry.setModificationTime((int) mtime);
             entry.setInode(inode);
             entry.setMode(smode);
+            //try {
+                //entry.setFileColors(RpmFileColors.classify(new FileClassification(), sourcePath.toString(), mode).getFileColors());
+
+            //} catch (IOException | MagicException e) {
+            //    throw new RuntimeException(e);
+            //}
         });
 
         if (customizer != null) {

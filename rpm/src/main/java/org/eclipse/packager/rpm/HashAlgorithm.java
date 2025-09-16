@@ -18,7 +18,8 @@ import org.bouncycastle.bcpg.HashAlgorithmTags;
 public enum HashAlgorithm {
     SHA1(HashAlgorithmTags.SHA1, "sha"),
     SHA256(HashAlgorithmTags.SHA256, "sha256"),
-    SHA512(HashAlgorithmTags.SHA512, "sha512");
+    SHA512(HashAlgorithmTags.SHA512, "sha512"),
+    SHA3_256(HashAlgorithmTags.SHA3_256, "sha3_256"),;
 
     private final int value;
 

@@ -22,7 +22,9 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 import org.apache.commons.io.IOUtils;
 import org.bouncycastle.bcpg.ArmoredInputStream;
@@ -34,7 +36,9 @@ import org.bouncycastle.openpgp.bc.BcPGPSecretKeyRing;
 import org.bouncycastle.openpgp.operator.bc.BcPBESecretKeyDecryptorBuilder;
 import org.bouncycastle.openpgp.operator.bc.BcPGPDigestCalculatorProvider;
 import org.eclipse.packager.rpm.HashAlgorithm;
+import org.eclipse.packager.rpm.RpmFormat;
 import org.eclipse.packager.rpm.RpmSignatureTag;
+import org.eclipse.packager.rpm.RpmTag;
 import org.eclipse.packager.rpm.Rpms;
 import org.eclipse.packager.rpm.header.Header;
 import org.eclipse.packager.rpm.header.Headers;
@@ -61,21 +65,30 @@ public class RpmFileSignatureProcessor {
      * @param privateKeyIn : encrypted private key as {@link InputStream}
      * @param passphrase : passphrase to decrypt the private key
      * @param out : {@link OutputStream} to write to
-     * @throws IOException
-     * @throws PGPException
+     * @throws IOException if the file does not exist or cannot be read
+     * @throws PGPException if the private key cannot be extracted
      */
     public static void perform(Path rpm, InputStream privateKeyIn, String passphrase, OutputStream out, HashAlgorithm hashAlgorithm)
         throws IOException, PGPException {
-
         final long leadLength = 96;
+
         long signatureHeaderStart;
+
         long signatureHeaderLength;
+
         long payloadHeaderStart;
+
         long payloadHeaderLength;
+
         long payloadStart;
+
         long archiveSize;
+
         long payloadSize;
+
         byte[] signatureHeader;
+
+        int rpmFormat;
 
         if (!Files.exists(rpm)) {
             throw new IOException("The file " + rpm.getFileName() + " does not exist");
@@ -86,6 +99,7 @@ public class RpmFileSignatureProcessor {
 
         // Get the information of the RPM
         try (RpmInputStream rpmIn = new RpmInputStream(new BufferedInputStream(Files.newInputStream(rpm)))) {
+            rpmFormat = Objects.requireNonNullElse(rpmIn.getPayloadHeader().getInteger(RpmTag.RPM_FORMAT), RpmFormat.DEFAULT.getFormat());
             signatureHeaderStart = rpmIn.getSignatureHeader().getStart();
             signatureHeaderLength = rpmIn.getSignatureHeader().getLength();
             payloadHeaderStart = rpmIn.getPayloadHeader().getStart();
@@ -108,7 +122,7 @@ public class RpmFileSignatureProcessor {
             IOUtils.readFully(channelIn, payloadHeaderBuff);
             ByteBuffer payloadBuff = ByteBuffer.allocate((int) payloadSize);
             IOUtils.readFully(channelIn, payloadBuff);
-            signatureHeader = getSignature(privateKey, payloadHeaderBuff, payloadBuff, archiveSize, hashAlgorithm);
+            signatureHeader = getSignature(privateKey, payloadHeaderBuff, payloadBuff, archiveSize, hashAlgorithm, rpmFormat);
         }
 
         // Write to the OutputStream
@@ -126,18 +140,19 @@ public class RpmFileSignatureProcessor {
      * "https://rpm-software-management.github.io/rpm/manual/format.html">https://rpm-software-management.github.io/rpm/manual/format.html</a>
      * </p>
      *
-     * @param privateKey : private key already extracted
+     * @param privateKey    : private key already extracted
      * @param payloadHeader : Payload's header as {@link ByteBuffer}
-     * @param payload : Payload as {@link ByteBuffer}
-     * @param archiveSize : archiveSize retrieved in {@link RpmInformation}
+     * @param payload       : Payload as {@link ByteBuffer}
+     * @param archiveSize   : archiveSize retrieved in {@link RpmInformation}
      * @param hashAlgorithm
+     * @param rpmFormat
      * @return the signature header as a bytes array
      * @throws IOException
      */
     private static byte[] getSignature(PGPPrivateKey privateKey, ByteBuffer payloadHeader, ByteBuffer payload,
-        long archiveSize, HashAlgorithm hashAlgorithm) throws IOException {
+                                       long archiveSize, HashAlgorithm hashAlgorithm, int rpmFormat) throws IOException {
         Header<RpmSignatureTag> signatureHeader = new Header<>();
-        List<SignatureProcessor> signatureProcessors = getSignatureProcessors(privateKey, hashAlgorithm);
+        List<SignatureProcessor> signatureProcessors = getSignatureProcessors(privateKey, hashAlgorithm, rpmFormat);
         payloadHeader.flip();
         payload.flip();
         for (SignatureProcessor processor : signatureProcessors) {
@@ -183,16 +198,27 @@ public class RpmFileSignatureProcessor {
      * </p>
      *
      * @param privateKey : the private key, already extracted
+     * @param rpmFormat
      * @return {@link List<SignatureProcessor>} of {@link SignatureProcessor}
      */
-    private static List<SignatureProcessor> getSignatureProcessors(PGPPrivateKey privateKey, HashAlgorithm hashAlgorithm) {
-        List<SignatureProcessor> signatureProcessors = new ArrayList<>();
+    private static List<SignatureProcessor> getSignatureProcessors(PGPPrivateKey privateKey, HashAlgorithm hashAlgorithm, int rpmFormat) {
+        List<SignatureProcessor> signatureProcessors = new ArrayList<>(6);
         signatureProcessors.add(SignatureProcessors.size());
         signatureProcessors.add(SignatureProcessors.sha256Header());
-        signatureProcessors.add(SignatureProcessors.sha1Header());
-        signatureProcessors.add(SignatureProcessors.md5());
+
+        if (rpmFormat < 6) {
+            signatureProcessors.add(SignatureProcessors.sha1Header());
+            signatureProcessors.add(SignatureProcessors.md5());
+        }
+
         signatureProcessors.add(SignatureProcessors.payloadSize());
-        signatureProcessors.add(new RsaSignatureProcessor(privateKey, hashAlgorithm));
+
+        if (rpmFormat < 6) {
+            signatureProcessors.add(new RsaSignatureProcessor(privateKey, hashAlgorithm));
+        } else {
+            signatureProcessors.add(new OpenpgpHeaderSignatureProcessor(Collections.singletonList(privateKey), Collections.singletonList(hashAlgorithm)));
+        }
+
         return signatureProcessors;
     }
 

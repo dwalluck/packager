@@ -23,6 +23,11 @@ public enum RpmSignatureTag implements RpmBaseTag {
     SHA1HEADER(269, String.class),
     LONGARCHIVESIZE(271, Long.class),
     SHA256HEADER(273, String.class),
+    /**
+     * All OpenPGP signature(s) in the header, including legacy ones (base64 encoded).
+     */
+    OPENPGP(278, String[].class),
+    RESERVED(999, byte[].class),
 
     SIZE(1000, Integer.class),
     PGP(1002, byte[].class),

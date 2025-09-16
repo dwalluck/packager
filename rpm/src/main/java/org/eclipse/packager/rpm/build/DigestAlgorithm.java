@@ -30,7 +30,8 @@ public enum DigestAlgorithm {
     SHA256("SHA-256", HashAlgorithmTags.SHA256),
     SHA384("SHA-384", HashAlgorithmTags.SHA384),
     SHA512("SHA-512", HashAlgorithmTags.SHA512),
-    SHA224("SHA-224", HashAlgorithmTags.SHA224);
+    SHA224("SHA-224", HashAlgorithmTags.SHA224),
+    SHA3_256("SHA3-256", HashAlgorithmTags.SHA3_256),;
 
     private final String algorithm;
 
