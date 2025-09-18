@@ -16,6 +16,7 @@ package org.eclipse.packager.security.pgp;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.Spliterator;
@@ -24,14 +25,25 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+import org.bouncycastle.bcpg.BCPGInputStream;
+import org.bouncycastle.bcpg.SignaturePacket;
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPKeyRing;
 import org.bouncycastle.openpgp.PGPPrivateKey;
+import org.bouncycastle.openpgp.PGPPublicKey;
 import org.bouncycastle.openpgp.PGPSecretKey;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
+import org.bouncycastle.openpgp.PGPSignature;
+import org.bouncycastle.openpgp.PGPSignatureGenerator;
+import org.bouncycastle.openpgp.PGPSignatureVerifier;
 import org.bouncycastle.openpgp.PGPUtil;
+import org.bouncycastle.openpgp.bc.BcPGPPublicKeyRingCollection;
 import org.bouncycastle.openpgp.bc.BcPGPSecretKeyRingCollection;
+import org.bouncycastle.openpgp.operator.PGPContentVerifier;
+import org.bouncycastle.openpgp.operator.PGPContentVerifierBuilder;
 import org.bouncycastle.openpgp.operator.bc.BcPBESecretKeyDecryptorBuilder;
+import org.bouncycastle.openpgp.operator.bc.BcPGPContentSignerBuilder;
+import org.bouncycastle.openpgp.operator.bc.BcPGPContentVerifierBuilderProvider;
 import org.bouncycastle.openpgp.operator.bc.BcPGPDigestCalculatorProvider;
 
 public final class PgpHelper {
@@ -54,7 +66,7 @@ public final class PgpHelper {
 
     public static Stream<PGPSecretKeyRing> streamSecretKeyring(final InputStream input) throws IOException, PGPException {
         final Stream<PGPKeyRing> s = streamKeyring(input);
-        return s.filter(k -> k instanceof PGPSecretKeyRing).map(o -> (PGPSecretKeyRing) o);
+        return s.filter(PGPSecretKeyRing.class::isInstance).map(o -> (PGPSecretKeyRing) o);
     }
 
     public static Stream<PGPSecretKey> streamSecretKeys(final InputStream input) throws IOException, PGPException {
@@ -76,18 +88,9 @@ public final class PgpHelper {
     public static Predicate<PGPSecretKey> keyShortId(final String keyId) {
         final long keyIdNum = Long.parseUnsignedLong(keyId, 16);
 
-        return new Predicate<PGPSecretKey>() {
-
-            @Override
-            public boolean test(final PGPSecretKey key) {
-                final long shortId = key.getKeyID() & 0xFFFFFFFFL;
-
-                if (key.getKeyID() != keyIdNum && shortId != keyIdNum) {
-                    return false;
-                }
-
-                return true;
-            }
+        return key -> {
+            final long shortId = key.getKeyID() & 0xFFFFFFFFL;
+            return key.getKeyID() == keyIdNum || shortId == keyIdNum;
         };
     }
 
@@ -104,8 +107,48 @@ public final class PgpHelper {
         return secretKey.extractPrivateKey(new BcPBESecretKeyDecryptorBuilder(new BcPGPDigestCalculatorProvider()).build(passPhrase));
     }
 
-    public static PGPSecretKey loadSecretKey(final InputStream input, final String keyId) throws IOException, PGPException {
+    public boolean verifySignature(final InputStream input, final String keyId, byte[] signature, int hashAlgorithm) throws IOException, PGPException {
+        final PGPPublicKey publicKey = loadPublicKey(input, keyId);
+        if (publicKey == null) {
+            return false;
+        }
+
+        BcPGPContentVerifierBuilderProvider bcPGPContentVerifierBuilderProvider = new BcPGPContentVerifierBuilderProvider();
+        PGPContentVerifierBuilder pgpContentVerifierBuilder = bcPGPContentVerifierBuilderProvider.get(publicKey.getPublicKeyPacket().getAlgorithm(), hashAlgorithm);
+        PGPContentVerifier build = pgpContentVerifierBuilder.build(publicKey);
+        return build.verify(signature);
+    }
+
+    public static PGPPublicKey loadPublicKey(final InputStream input, final String keyId) throws IOException, PGPException {
         final long keyIdNum = Long.parseUnsignedLong(keyId, 16);
+        final BcPGPPublicKeyRingCollection keyRings = new BcPGPPublicKeyRingCollection(PGPUtil.getDecoderStream(input));
+        final Iterator<?> keyRingIter = keyRings.getKeyRings();
+        while (keyRingIter.hasNext()) {
+            final PGPKeyRing keyRing = (PGPKeyRing) keyRingIter.next();
+
+            final Iterator<?> publicKeyIterator = keyRing.getPublicKeys();
+            while (publicKeyIterator.hasNext()) {
+                final PGPPublicKey key = (PGPPublicKey) publicKeyIterator.next();
+
+                if (!key.isEncryptionKey()) {
+                    continue;
+                }
+
+                final long shortId = key.getKeyID() & 0xFFFFFFFFL;
+
+                if (key.getKeyID() != keyIdNum && shortId != keyIdNum) {
+                    continue;
+                }
+
+                return key;
+            }
+        }
+
+        return null;
+    }
+
+    public static PGPSecretKey loadSecretKey(final InputStream input, final String keyId) throws IOException, PGPException {
+        final long keyIdNum = new BigInteger(keyId, 16).longValue();
 
         final BcPGPSecretKeyRingCollection keyrings = new BcPGPSecretKeyRingCollection(PGPUtil.getDecoderStream(input));
 

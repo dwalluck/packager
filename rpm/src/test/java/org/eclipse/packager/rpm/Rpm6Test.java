@@ -12,7 +12,8 @@
  */
 
 package org.eclipse.packager.rpm;
-
+import org.bouncycastle.openpgp.PGPException;
+import org.bouncycastle.openpgp.PGPPrivateKey;
 import org.eclipse.packager.rpm.app.Dumper;
 import org.eclipse.packager.rpm.build.BuilderContext;
 import org.eclipse.packager.rpm.build.BuilderOptions;
@@ -22,6 +23,8 @@ import org.eclipse.packager.rpm.coding.PayloadCoding;
 import org.eclipse.packager.rpm.coding.PayloadFlags;
 import org.eclipse.packager.rpm.parse.InputHeader;
 import org.eclipse.packager.rpm.parse.RpmInputStream;
+import org.eclipse.packager.rpm.signature.OpenpgpHeaderSignatureProcessor;
+import org.eclipse.packager.security.pgp.PgpHelper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.Logger;
@@ -29,11 +32,15 @@ import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Base64;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import static java.util.EnumSet.of;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -91,7 +98,77 @@ class Rpm6Test {
             assertThat(header.getLongList(LONG_FILE_SIZES)).containsExactly(0L, 0L, 0L, 0L, 6L, 3L, 16L, 0L);
             assertThat( header.getIntegerList(FILE_SIZES)).isNull();
             assertThat(header.getLong(RpmTag.PAYLOAD_SIZE)).isEqualTo(1152L);
-            assertThat(header.getLong(RpmTag.PAYLOAD_SIZE_ALT)).isGreaterThanOrEqualTo(184L); // XXX: compressed size varies
+            assertThat(header.getLong(RpmTag.PAYLOAD_SIZE_ALT)).isGreaterThanOrEqualTo(184L); // XXX: compressed size v
+        }
+    }
+
+    private static PGPPrivateKey getPrivateKey(final String keyId, final String password) throws IOException, PGPException {
+        try (final InputStream stream = Files.newInputStream(Path.of("src/test/resources/key/myseckeys.asc"))) {
+            return PgpHelper.loadPrivateKey(stream, keyId, password);
+        }
+    }
+
+    @Test
+    void testSignature(final @TempDir Path outBase) throws IOException, PGPException {
+        final Path outFile;
+
+        final BuilderOptions options = new BuilderOptions();
+        options.setRpmFormat(6);
+
+        try (final RpmBuilder builder = new RpmBuilder("test3", RpmVersion.valueOf("1.0.0-1"), "noarch", outBase, options)) {
+            final RpmBuilder.PackageInformation pinfo = builder.getInformation();
+
+            pinfo.setLicense("EPL");
+            pinfo.setSummary("Foo bar");
+            pinfo.setVendor("Eclipse Package Drone Project");
+            pinfo.setDescription("This is a test package");
+            pinfo.setDistribution("Eclipse Package Drone");
+
+            final BuilderContext ctx = builder.newContext();
+
+            ctx.addDirectory("/etc/test3");
+            ctx.addDirectory("etc/test3/a");
+            ctx.addDirectory("//etc/test3/b");
+            ctx.addDirectory("/etc/");
+
+            ctx.addDirectory("/var/lib/test3", finfo -> finfo.setUser(""));
+
+            ctx.addFile("/etc/test3/file1", IN_BASE.resolve("file1"), BuilderContext.pathProvider().customize(finfo -> finfo.setFileFlags(of(FileFlags.CONFIGURATION))));
+
+            ctx.addFile("/etc/test3/file2", new ByteArrayInputStream("foo".getBytes(StandardCharsets.UTF_8)), finfo -> {
+                finfo.setTimestamp(LocalDateTime.of(2014, 1, 1, 0, 0).toInstant(ZoneOffset.UTC));
+                finfo.setFileFlags(of(FileFlags.CONFIGURATION));
+            });
+
+            ctx.addSymbolicLink("/etc/test3/file3", "/etc/test3/file1");
+
+            builder.setPreInstallationScript("true # test call");
+
+            final PGPPrivateKey privateKey1 = getPrivateKey("BE23B2E50DE857D8F35DE56ECF9639A55B155F7D", "123");
+            final PGPPrivateKey privateKey2 = getPrivateKey("E1431CF2AB5A73408A381FF0F44D281C8F2EAD97", "123");
+            final List<PGPPrivateKey> privateKeys = List.of(privateKey1, privateKey2);
+            final List<HashAlgorithm> hashAlgorithms = List.of(HashAlgorithm.SHA512, HashAlgorithm.SHA256);
+            builder.addSignatureProcessor(new OpenpgpHeaderSignatureProcessor(privateKeys, hashAlgorithms));
+
+            outFile = builder.getTargetFile();
+
+            builder.build();
+
+            assertThat(outFile).exists();
+
+            System.out.format("Minimum required RPM version: %s%n", builder.getRequiredRpmVersion());
+
+            assertThat(builder.getRequiredRpmVersion()).isEqualTo(RpmBuilder.Version.V5_99);
+        }
+
+        try (final RpmInputStream in = new RpmInputStream(Files.newInputStream(outFile))) {
+            final InputHeader<RpmSignatureTag> sigHeader = in.getSignatureHeader();
+            final List<String> encodedSignatures = sigHeader.getStringList(RpmSignatureTag.OPENPGP);
+            assertThat(encodedSignatures).hasSize(2);
+            final List<byte[]> signatures = encodedSignatures.stream().map(encoded -> Base64.getDecoder().decode(encoded)).collect(Collectors.toList());
+            assertThat(signatures).hasSize(2);
+            assertThat(signatures.get(0)).hasSize(96).asBase64Encoded().isEqualTo(encodedSignatures.get(0));
+            assertThat(signatures.get(1)).hasSize(543).asBase64Encoded().isEqualTo(encodedSignatures.get(1));
         }
     }
 }

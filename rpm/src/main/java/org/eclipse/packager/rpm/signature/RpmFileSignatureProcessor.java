@@ -22,6 +22,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import org.apache.commons.io.IOUtils;
@@ -192,11 +193,20 @@ public class RpmFileSignatureProcessor {
     private static List<SignatureProcessor> getSignatureProcessors(final PGPPrivateKey privateKey, final HashAlgorithm hashAlgorithm, final int rpmFormat) {
         final List<SignatureProcessor> signatureProcessors = new ArrayList<>();
         signatureProcessors.add(SignatureProcessors.size(rpmFormat));
-        signatureProcessors.add(SignatureProcessors.sha256Header());
-        signatureProcessors.add(SignatureProcessors.sha1Header());
-        signatureProcessors.add(SignatureProcessors.md5());
         signatureProcessors.add(SignatureProcessors.payloadSize(rpmFormat));
-        signatureProcessors.add(new RsaSignatureProcessor(privateKey, hashAlgorithm));
+
+        if (rpmFormat >= 6) {
+            signatureProcessors.add(SignatureProcessors.sha3_256Header());
+            signatureProcessors.add(SignatureProcessors.sha512Header());
+            // TODO: Support multiple signatures
+            signatureProcessors.add(new OpenpgpHeaderSignatureProcessor(Collections.singletonList(privateKey), Collections.singletonList(hashAlgorithm)));
+        } else {
+            signatureProcessors.add(SignatureProcessors.sha256Header());
+            signatureProcessors.add(SignatureProcessors.sha1Header());
+            signatureProcessors.add(SignatureProcessors.md5());
+            signatureProcessors.add(new RsaSignatureProcessor(privateKey, hashAlgorithm));
+        }
+
         return signatureProcessors;
     }
 
